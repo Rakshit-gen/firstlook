@@ -8,6 +8,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
+from .checks import check_finding
 from .env import Env
 from .finding import Finding
 from .prompts import CONCLUDE, SYSTEM, brief
@@ -78,7 +79,10 @@ def build_agent(model, env: Env, checkpointer=None, max_tool_calls: int = MAX_TO
     concluder = model.with_structured_output(Finding).with_retry(stop_after_attempt=3)
 
     def conclude(state: State):
-        return {"finding": concluder.invoke([*state["messages"], HumanMessage(CONCLUDE)])}
+        raw = concluder.invoke([*state["messages"], HumanMessage(CONCLUDE)])
+        answers = [m.content for m in state["messages"] if isinstance(m, ToolMessage)]
+        finding, notes = check_finding(raw, answers, env.services())
+        return {"finding": finding, "notes": [*state.get("notes", []), *notes]}
 
     def over_budget(state: State):
         # Every tool call needs an answer, or the next model call is rejected.

@@ -57,7 +57,9 @@ def test_the_tool_budget_stops_a_runaway_model():
     assert len(answers) == 5  # 3 run, then 2 refused because 3 + 2 > 4
     assert all(m.content.startswith("Not run: the budget of 4") for m in answers[3:])
     assert out["tool_calls"] == 3
-    assert out["notes"] == ["stopped investigating at the budget of 4 tool calls"]
+    assert out["notes"][0] == "stopped investigating at the budget of 4 tool calls"
+    # The deploy list was never fetched, so the quoted deploy line is not evidence.
+    assert out["finding"].action.kind == "escalate"
 
 
 def test_a_repeated_call_is_not_run_again():
