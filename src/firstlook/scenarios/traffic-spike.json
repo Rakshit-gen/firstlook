@@ -1,0 +1,33 @@
+{
+  "name": "traffic-spike",
+  "title": "Slow pages during the flash sale",
+  "start": "2026-10-06T17:00:00Z",
+  "minutes": 120,
+  "services": {
+    "web": {"depends_on": ["api"], "baseline": {"rps": 600}},
+    "api": {"depends_on": ["cache", "products-db"], "baseline": {"rps": 500}},
+    "cache": {"depends_on": [], "baseline": {"rps": 2000, "p99_ms": 2}},
+    "products-db": {"depends_on": [], "baseline": {"rps": 200, "p99_ms": 9}}
+  },
+  "deploys": [
+    {"service": "web", "version": "v12.4.0", "at": 50, "change": "Flash sale banner"}
+  ],
+  "effects": [
+    {"service": "web", "metric": "rps", "to": 2600, "at": 60},
+    {"service": "api", "metric": "rps", "to": 2100, "at": 60},
+    {"service": "api", "metric": "cpu", "to": 0.97, "at": 61},
+    {"service": "api", "metric": "p99_ms", "to": 2400, "at": 62},
+    {"service": "api", "metric": "error_rate", "to": 0.06, "at": 63},
+    {"service": "cache", "metric": "rps", "to": 8400, "at": 60}
+  ],
+  "logs": [
+    {"service": "api", "at": 62, "per_minute": 10, "level": "warn",
+     "message": "request queue depth 412, all 32 workers busy"},
+    {"service": "web", "at": 60, "per_minute": 1, "level": "info",
+     "message": "sale started: banner live, email sent to 1.2M subscribers"}
+  ],
+  "truth": {"service": "api", "cause": "traffic", "fix": "scale_up"},
+  "runbooks": {
+    "api": "CPU saturated under real customer traffic: scale up (the autoscaler max is 12; raise it to 30 for sales). Don't rate-limit paying customers during a sale."
+  }
+}

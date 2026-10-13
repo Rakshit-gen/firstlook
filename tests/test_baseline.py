@@ -50,3 +50,10 @@ def test_baseline_misses_a_slow_disk_fill():
     # an hour isn't one, so the first change it sees is the errors at the end.
     f = baseline(ScenarioEnv(builtin("disk-full")))
     assert (f.service, f.cause, f.action.kind) == ("ingest", "unknown", "escalate")
+
+
+def test_baseline_rate_limits_the_cache_in_a_flash_sale():
+    # A known miss: the extra traffic reaches every layer in the same minute,
+    # and the tie rule picks the deepest one, which isn't the one struggling.
+    f = baseline(ScenarioEnv(builtin("traffic-spike")))
+    assert (f.service, f.cause, f.action.kind) == ("cache", "traffic", "rate_limit")
