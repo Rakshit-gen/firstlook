@@ -31,3 +31,8 @@ def test_tie_goes_to_the_called_service_whatever_the_names():
         }
     )
     assert baseline(ScenarioEnv(s)).service == "a-db"
+
+
+def test_baseline_escalates_to_the_vendor_not_the_fresh_release():
+    f = baseline(ScenarioEnv(builtin("slow-vendor")))
+    assert (f.service, f.cause, f.action.kind) == ("geo-vendor", "dependency", "escalate")

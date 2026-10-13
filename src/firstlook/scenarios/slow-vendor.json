@@ -1,0 +1,30 @@
+{
+  "name": "slow-vendor",
+  "title": "Store search slow right after a search release",
+  "start": "2026-10-03T09:00:00Z",
+  "minutes": 120,
+  "services": {
+    "web": {"depends_on": ["search"], "baseline": {"rps": 300}},
+    "search": {"depends_on": ["search-index", "geo-vendor"], "baseline": {"rps": 180}},
+    "search-index": {"depends_on": [], "baseline": {"rps": 180, "p99_ms": 40}},
+    "geo-vendor": {"depends_on": [], "baseline": {"rps": 60, "p99_ms": 220}}
+  },
+  "deploys": [
+    {"service": "search", "version": "v5.1.0", "at": 55, "change": "Tweak ranking weights for new arrivals"}
+  ],
+  "effects": [
+    {"service": "geo-vendor", "metric": "p99_ms", "to": 8000, "at": 61},
+    {"service": "search", "metric": "p99_ms", "to": 8300, "at": 61},
+    {"service": "search", "metric": "error_rate", "to": 0.03, "at": 61}
+  ],
+  "logs": [
+    {"service": "search", "at": 61, "per_minute": 12, "level": "warn",
+     "message": "geo lookup took 8012ms (limit 8000ms), serving results without distance"},
+    {"service": "geo-vendor", "at": 61, "per_minute": 2, "level": "warn",
+     "message": "vendor status page: degraded performance in eu-west"}
+  ],
+  "truth": {"service": "geo-vendor", "cause": "dependency", "fix": "escalate"},
+  "runbooks": {
+    "search": "If geo lookups are slow, the vendor is the usual cause. Open a ticket with them; rolling back search does not help."
+  }
+}
