@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from promfake import FakeProm
 
+from firstlook.baseline import baseline
 from firstlook.live import LiveEnv
 from firstlook.tools import make_tools
 
@@ -106,3 +107,15 @@ def test_a_prometheus_error_is_an_answer_not_a_crash(tmp_path):
     finally:
         fake.close()
     assert out.startswith("Error from Prometheus: bad_data: exceeded maximum resolution")
+
+
+def test_alerts_for_unlisted_services_are_left_out(tmp_path):
+    alert = {"metric": {"alertname": "Down", "service": "billing"}, "value": [0, "1"]}
+    fake = FakeProm({'ALERTS{alertstate="firing"}': [alert]})
+    config = {"prometheus": fake.url, "services": {"api": {}}}
+    try:
+        env = LiveEnv(config, tmp_path, now=NOW)
+        assert env.alerts() == []
+        assert baseline(env).service == "api"  # used to raise KeyError on billing
+    finally:
+        fake.close()

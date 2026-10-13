@@ -14,6 +14,8 @@ The config (a dict, usually read from TOML) says where each lives:
     [services.checkout]
     depends_on = ["payments"]
 
+Only alerts for services listed under [services] are looked at.
+
 Paths are relative to the config file.
 """
 
@@ -69,6 +71,8 @@ class LiveEnv:
         out = []
         for m, _ in self.prom.query('ALERTS{alertstate="firing"}', self.now):
             key = (m.get("alertname", "?"), m.get("service", m.get("job", "?")))
+            if key[1] not in self.config["services"]:
+                continue  # outside the system this config describes
             fired = datetime.fromtimestamp(since[key], UTC) if key in since else self.now
             out.append(Alert(key[0], key[1], "", fired, 0.0, 0.0))
         return sorted(out, key=lambda a: (a.fired, a.service))
