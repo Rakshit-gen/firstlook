@@ -160,6 +160,22 @@ def cmd_decide(args) -> int:
     return 0
 
 
+def cmd_waiting(args) -> int:
+    latest = {}
+    for t in saver(args.db).list(None):  # newest first
+        latest.setdefault(t.config["configurable"]["thread_id"], t)
+    waiting = [
+        (thread, t)
+        for thread, t in latest.items()
+        if any(w[1] == "__interrupt__" for w in t.pending_writes or [])
+    ]
+    for thread, t in waiting:
+        print(f"{thread:24} {t.metadata.get('model', '?')}")
+    if not waiting:
+        print("No runs are waiting for a decision.")
+    return 0
+
+
 def cmd_eval(args) -> int:
     scenarios = [pick(n) for n in args.scenario] or load_all(SCENARIOS)
     spec = model_spec(args)
@@ -215,6 +231,10 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("-o", "--output", help="write the incident note to this file")
     s.add_argument("--db", default=default_db(), help="where paused runs are kept")
     s.set_defaults(func=cmd_decide)
+
+    s = sub.add_parser("waiting", help="list paused runs that need a decision")
+    s.add_argument("--db", default=default_db(), help="where paused runs are kept")
+    s.set_defaults(func=cmd_waiting)
 
     s = sub.add_parser("eval", help="score runs against the scenarios' known answers")
     s.add_argument("scenario", nargs="*", help="scenarios to run (default: all built-in)")

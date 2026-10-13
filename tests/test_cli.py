@@ -96,10 +96,14 @@ def test_pause_then_decide_later(monkeypatch, capsys, tmp_path):
     assert "Proposed: roll back payments" in out
     thread = out.split("Saved as ")[1].split(".")[0]
     assert thread.startswith("bad-deploy-")
+    main(["waiting", "--db", db])
+    assert capsys.readouterr().out.split() == [thread, "groq:test"]
     # A fresh process: nothing carried over but the database.
     fake_model(monkeypatch)
     assert main(["decide", thread, "yes", "--by", "sam", "--db", db]) == 0
     assert "Approved by sam." in capsys.readouterr().out
+    main(["waiting", "--db", db])
+    assert capsys.readouterr().out == "No runs are waiting for a decision.\n"
     assert main(["decide", thread, "no", "--db", db]) == 2
     assert "not waiting for a decision" in capsys.readouterr().err
     assert main(["decide", "nope", "yes", "--db", db]) == 2
