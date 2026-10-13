@@ -1,0 +1,34 @@
+{
+  "name": "db-pool",
+  "title": "Orders timing out after a reports release",
+  "start": "2026-10-02T01:00:00Z",
+  "minutes": 120,
+  "services": {
+    "web": {"depends_on": ["orders"], "baseline": {"rps": 250}},
+    "orders": {"depends_on": ["orders-db"], "baseline": {"rps": 110}},
+    "reports": {"depends_on": ["orders-db"], "baseline": {"rps": 4}},
+    "orders-db": {"depends_on": [], "baseline": {"rps": 400, "p99_ms": 15}}
+  },
+  "deploys": [
+    {"service": "reports", "version": "v1.8.0", "at": 48,
+     "change": "Add hourly full export of orders"}
+  ],
+  "effects": [
+    {"service": "orders-db", "metric": "db_connections", "to": 100, "at": 50, "ramp": 10},
+    {"service": "orders", "metric": "p99_ms", "to": 5200, "at": 58},
+    {"service": "orders", "metric": "error_rate", "to": 0.12, "at": 59},
+    {"service": "web", "metric": "error_rate", "to": 0.03, "at": 59}
+  ],
+  "logs": [
+    {"service": "reports", "at": 50, "per_minute": 1, "level": "info",
+     "message": "export started: reading all orders in one transaction per shard"},
+    {"service": "orders-db", "at": 58, "per_minute": 6,
+     "message": "FATAL: sorry, too many clients already (100 in use, 64 by role reports)"},
+    {"service": "orders", "at": 58, "per_minute": 20,
+     "message": "timed out after 5000ms waiting for a connection from the pool"}
+  ],
+  "truth": {"service": "reports", "cause": "deploy", "fix": "rollback"},
+  "runbooks": {
+    "orders-db": "Pool exhausted: find out which client holds the connections before restarting anything. A restart drops every in-flight order."
+  }
+}
