@@ -69,4 +69,18 @@ def make_tools(env: Env) -> list:
             out.append(f"({len(groups) - 5} rarer messages not shown)")
         return "\n".join(out)
 
-    return [list_alerts, query_metric, search_logs]
+    @tool
+    def recent_deploys(minutes: int = 120, service: str = "") -> str:
+        """List deploys in the last `minutes`, newest first, optionally for one service."""
+        found = [(t, d) for t, d in env.deploys(minutes) if not service or d.service == service]
+        if not found:
+            return f"No deploys in the last {minutes} minutes" + (
+                f" to {service}." if service else "."
+            )
+        out = []
+        for t, d in sorted(found, key=lambda td: td[0], reverse=True):
+            line = f"- {t:%H:%M} UTC {d.service} {d.version} by {d.by}"
+            out.append(line + (f": {d.change}" if d.change else ""))
+        return "\n".join(out)
+
+    return [list_alerts, query_metric, search_logs, recent_deploys]

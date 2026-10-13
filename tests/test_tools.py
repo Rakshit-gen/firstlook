@@ -39,3 +39,12 @@ def test_search_logs_groups_messages():
         "No error logs for payments in the last 30 minutes containing 'timeout'."
     )
     assert call("search_logs", service="inventory").startswith("No error logs")
+
+
+def test_recent_deploys_newest_first():
+    out = call("recent_deploys").splitlines()
+    assert out == [
+        "- 14:58 UTC payments v2.14.0 by ci: Refactor refund handler to the new card token format",
+        "- 14:20 UTC inventory v3.2.1 by ci: Bump logging library",
+    ]
+    assert call("recent_deploys", service="web") == "No deploys in the last 120 minutes to web."
