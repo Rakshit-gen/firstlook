@@ -96,7 +96,8 @@ def make_tools(env: Env) -> list:
     @tool
     @friendly
     def recent_deploys(minutes: int = 120, service: str = "") -> str:
-        """List deploys in the last `minutes`, newest first, optionally for one service."""
+        """List deploys and feature flag changes in the last `minutes`, newest first,
+        optionally for one service."""
         found = [(t, d) for t, d in env.deploys(minutes) if not service or d.service == service]
         if not found:
             return f"No deploys in the last {minutes} minutes" + (

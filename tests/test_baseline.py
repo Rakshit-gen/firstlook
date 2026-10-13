@@ -57,3 +57,8 @@ def test_baseline_rate_limits_the_cache_in_a_flash_sale():
     # and the tie rule picks the deepest one, which isn't the one struggling.
     f = baseline(ScenarioEnv(builtin("traffic-spike")))
     assert (f.service, f.cause, f.action.kind) == ("cache", "traffic", "rate_limit")
+
+
+def test_baseline_rolls_back_the_flag_but_calls_it_a_deploy():
+    f = baseline(ScenarioEnv(builtin("flag-flip")))
+    assert (f.service, f.cause, f.action.kind) == ("pricing", "deploy", "rollback")

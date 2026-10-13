@@ -1,0 +1,30 @@
+{
+  "name": "flag-flip",
+  "title": "Cart totals wrong and checkout erroring in Germany",
+  "start": "2026-10-07T08:00:00Z",
+  "minutes": 120,
+  "services": {
+    "web": {"depends_on": ["cart"], "baseline": {"rps": 350}},
+    "cart": {"depends_on": ["pricing"], "baseline": {"rps": 200}},
+    "pricing": {"depends_on": [], "baseline": {"rps": 260}}
+  },
+  "deploys": [
+    {"service": "cart", "version": "v9.9.1", "at": 30, "change": "Fix typo in empty cart message"},
+    {"service": "pricing", "version": "flag new_tax_rules=100%", "at": 70, "by": "feature-flags",
+     "change": "Roll the new EU tax rules out to everyone (was 5%)"}
+  ],
+  "effects": [
+    {"service": "pricing", "metric": "error_rate", "to": 0.09, "at": 71},
+    {"service": "cart", "metric": "error_rate", "to": 0.07, "at": 71}
+  ],
+  "logs": [
+    {"service": "pricing", "at": 71, "per_minute": 18,
+     "message": "no tax rule for region DE-BY under new_tax_rules; refusing to price cart"},
+    {"service": "cart", "at": 71, "per_minute": 12,
+     "message": "pricing returned 422 for cart total"}
+  ],
+  "truth": {"service": "pricing", "cause": "config", "fix": "rollback"},
+  "runbooks": {
+    "pricing": "Flag changes are rolled back in the flags console (set the percentage back). That counts as a rollback."
+  }
+}
