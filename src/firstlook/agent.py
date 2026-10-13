@@ -1,8 +1,9 @@
 """The incident agent as a LangGraph graph."""
 
+import json
 from typing import Annotated, TypedDict
 
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -48,6 +49,30 @@ def build_agent(model, env: Env, checkpointer=None, max_tool_calls: int = MAX_TO
     def count(state: State):
         return {"tool_calls": state.get("tool_calls", 0) + len(state["messages"][-1].tool_calls)}
 
+    runner = ToolNode(tools)
+
+    def key(call) -> str:
+        return call["name"] + json.dumps(call["args"], sort_keys=True)
+
+    def run_tools(state: State):
+        """Run the requested tools, but not ones already asked with the same
+        arguments: the answer hasn't changed, and models do get stuck asking."""
+        *earlier, last = state["messages"]
+        asked = {key(c) for m in earlier if isinstance(m, AIMessage) for c in m.tool_calls}
+        fresh = [c for c in last.tool_calls if key(c) not in asked]
+        out = [
+            ToolMessage(
+                "You already made this exact call; its answer is above. Try something else.",
+                tool_call_id=c["id"],
+                name=c["name"],
+            )
+            for c in last.tool_calls
+            if key(c) in asked
+        ]
+        if fresh:
+            out += runner.invoke({"messages": [AIMessage("", tool_calls=fresh)]})["messages"]
+        return {"messages": out}
+
     def over_budget(state: State):
         # Every tool call needs an answer, or the next model call is rejected.
         pending = state["messages"][-1].tool_calls
@@ -66,7 +91,7 @@ def build_agent(model, env: Env, checkpointer=None, max_tool_calls: int = MAX_TO
     g.add_node("intake", intake)
     g.add_node("investigate", investigate)
     g.add_node("count", count)
-    g.add_node("tools", ToolNode(tools))
+    g.add_node("tools", run_tools)
     g.add_node("over_budget", over_budget)
     g.add_edge(START, "intake")
     g.add_edge("intake", "investigate")

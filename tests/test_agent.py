@@ -47,3 +47,13 @@ def test_the_tool_budget_stops_a_runaway_model():
     assert all(m.content.startswith("Not run: the budget of 4") for m in answers[3:])
     assert out["tool_calls"] == 3
     assert out["notes"] == ["stopped investigating at the budget of 4 tool calls"]
+
+
+def test_a_repeated_call_is_not_run_again():
+    deploys = ("recent_deploys", {"minutes": 60})
+    model = scripted([calls(deploys), calls(deploys, ("list_alerts", {})), AIMessage("ok")])
+    out = build_agent(model, ENV).invoke({})
+    answers = [m for m in out["messages"] if m.type == "tool"]
+    assert [m.name for m in answers] == ["recent_deploys", "recent_deploys", "list_alerts"]
+    assert answers[1].content.startswith("You already made this exact call")
+    assert answers[2].content.startswith("HighErrorRate")
