@@ -4,6 +4,7 @@ from langgraph.types import Command
 from test_agent import ENV, GOOD
 
 from firstlook.agent import build_agent, memory
+from firstlook.baseline import baseline
 from firstlook.note import incident_note
 
 
@@ -31,3 +32,9 @@ def test_note_after_approval():
     note = run(approved=True)
     assert "Approved by sam.\nResult: dry run: would roll back payments" in note
     assert "Waiting" not in note
+
+
+def test_rules_note_does_not_wait_or_show_an_empty_trail():
+    note = incident_note({"finding": baseline(ENV), "notes": ["rules only"]}, ENV)
+    assert "Proposed: roll back payments (undo v2.14.0).\nNot carried out." in note
+    assert "How the agent got there" not in note

@@ -46,13 +46,15 @@ def incident_note(state: dict, env: Env, title: str = "Incident") -> str:
             if state.get("result"):
                 out.append(f"Result: {state['result']}.")
             if "approved" not in state:
-                out.append("Waiting for approval.")
+                # Without messages this is the rules baseline, which only proposes.
+                out.append("Waiting for approval." if state.get("messages") else "Not carried out.")
     out += ["", "## Timeline", ""]
     out += [f"- {t:%H:%M} {text}" for t, text in timeline(env)]
-    trail = tool_trail(state.get("messages", []))
-    noun = "tool call" if len(trail) == 1 else "tool calls"
-    out += ["", f"## How the agent got there ({len(trail)} {noun})", ""]
-    out += [f"{i}. `{call}`" for i, call in enumerate(trail, 1)]
+    if state.get("messages"):
+        trail = tool_trail(state["messages"])
+        noun = "tool call" if len(trail) == 1 else "tool calls"
+        out += ["", f"## How the agent got there ({len(trail)} {noun})", ""]
+        out += [f"{i}. `{call}`" for i, call in enumerate(trail, 1)]
     if state.get("notes"):
         out += ["", "## Notes", ""] + [f"- {n}" for n in state["notes"]]
     return "\n".join(out) + "\n"
