@@ -6,22 +6,24 @@ import json
 import os
 import sqlite3
 import sys
+import tomllib
 import uuid
 from pathlib import Path
 
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 from . import __version__
-from .agent import build_agent
+from .agent import SERDE, build_agent, memory
 from .baseline import baseline
 from .env import ScenarioEnv
 from .evals import run_one, table
-from .executor import ScenarioExecutor, describe
+from .executor import DryRun, ScenarioExecutor, describe
 from .finding import Action
+from .live import LiveEnv
 from .llm import DEFAULT_MODEL, make_model
 from .note import incident_note
+from .prom import PromError
 from .scenario import SCENARIOS, ScenarioError, builtin, load, load_all
 
 
@@ -96,7 +98,7 @@ def write_note(note: str, path: str | None) -> None:
 
 def saver(path: str) -> SqliteSaver:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    return SqliteSaver(sqlite3.connect(path, check_same_thread=False))
+    return SqliteSaver(sqlite3.connect(path, check_same_thread=False), serde=SERDE)
 
 
 def default_db() -> str:
@@ -113,7 +115,7 @@ def cmd_run(args) -> int:
         state = {"finding": baseline(env), "notes": ["rules only: no model was used"]}
         write_note(incident_note(state, env, scenario.title), args.output)
         return 0
-    checkpointer = saver(args.db) if args.pause else InMemorySaver()
+    checkpointer = saver(args.db) if args.pause else memory()
     app = build_agent(
         make_model(spec), env, checkpointer=checkpointer, executor=ScenarioExecutor(scenario)
     )
@@ -127,13 +129,43 @@ def cmd_run(args) -> int:
         show_proposal(question.value)
         print(f"\nSaved as {thread}. Decide later with: firstlook decide {thread} yes|no")
         return 0
+    finish(app, question, cfg, args)
+    write_note(incident_note(app.get_state(cfg).values, env, scenario.title), args.output)
+    return 0
+
+
+def finish(app, question, cfg, args) -> None:
+    """Answer the approval question (asking, or --approve) until the run ends."""
     while question is not None:
         if args.approve:
             answer = {"approved": True, "by": "--approve"}
         else:
             answer = ask_approval(question.value)
         question = drive(app, Command(resume=answer), cfg, args.quiet)
-    write_note(incident_note(app.get_state(cfg).values, env, scenario.title), args.output)
+
+
+def cmd_live(args) -> int:
+    path = Path(args.config)
+    with open(path, "rb") as f:
+        config = tomllib.load(f)
+    env = LiveEnv(config, path.parent)
+    alerting = sorted({a.service for a in env.alerts()})
+    if not alerting:
+        print("No alerts firing; nothing to look at.")
+        return 0
+    title = f"{', '.join(alerting)} alerting at {env.now:%H:%M} UTC"
+    spec = model_spec(args)
+    if spec == "rules":
+        state = {"finding": baseline(env), "notes": ["rules only: no model was used"]}
+        write_note(incident_note(state, env, title), args.output)
+        return 0
+    # Live runs never touch production: an approved action is only recorded.
+    app = build_agent(make_model(spec), env, checkpointer=memory(), executor=DryRun())
+    cfg = {"configurable": {"thread_id": f"live-{uuid.uuid4().hex[:6]}"}}
+    if not args.quiet:
+        print(f"Investigating {title} with {spec}", file=sys.stderr)
+    finish(app, drive(app, {}, cfg, args.quiet), cfg, args)
+    write_note(incident_note(app.get_state(cfg).values, env, title), args.output)
     return 0
 
 
@@ -224,6 +256,16 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--db", default=default_db(), help="where paused runs are kept")
     s.set_defaults(func=cmd_run)
 
+    s = sub.add_parser("live", help="look at what is alerting now, from a config file")
+    s.add_argument("config", help="a TOML file naming Prometheus, services and data files")
+    s.add_argument("--model", help="rules, or groq:<model id> (same default as run)")
+    s.add_argument(
+        "--approve", action="store_true", help="approve without asking (actions are dry runs)"
+    )
+    s.add_argument("-o", "--output", help="write the incident note to this file")
+    s.add_argument("-q", "--quiet", action="store_true", help="don't show progress")
+    s.set_defaults(func=cmd_live)
+
     s = sub.add_parser("decide", help="approve or decline a paused run")
     s.add_argument("thread", help="the name printed by run --pause")
     s.add_argument("decision", choices=["yes", "no"])
@@ -249,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
         return args.func(args)
-    except (ScenarioError, ValueError, OSError) as e:
+    except (ScenarioError, ValueError, OSError, PromError) as e:
         print(f"firstlook: {e}", file=sys.stderr)
         return 2
     except (KeyboardInterrupt, EOFError):

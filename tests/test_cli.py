@@ -2,6 +2,7 @@ import json
 
 from fakes import calls, scripted
 from langchain_core.messages import AIMessage
+from promfake import FakeProm
 
 from firstlook.cli import main
 
@@ -118,3 +119,36 @@ def test_note_to_a_file(tmp_path, capsys):
     assert main(["run", "bad-deploy", "--model", "rules", "-o", str(out)]) == 0
     assert out.read_text().startswith("# Checkout failing for some customers")
     assert capsys.readouterr().out == ""
+
+
+def test_live_from_a_config(monkeypatch, capsys, tmp_path):
+    fake = FakeProm(
+        {
+            'ALERTS{alertstate="firing"}': [
+                {"metric": {"alertname": "HighErrorRate", "service": "payments"}, "value": [0, "1"]}
+            ]
+        }
+    )
+    (tmp_path / "f.toml").write_text(
+        f'prometheus = "{fake.url}"\n[services.payments]\n[services.checkout]\n'
+        'depends_on = ["payments"]\n'
+    )
+    try:
+        fake_model(monkeypatch)
+        assert main(["live", str(tmp_path / "f.toml"), "--model", "groq:t", "--approve"]) == 0
+    finally:
+        fake.close()
+    out = capsys.readouterr().out
+    assert out.startswith("# payments alerting at ")
+    # The fake model's quote isn't in any tool answer here, so nothing is acted on.
+    assert "escalate" in out
+    (tmp_path / "bad.toml").write_text("prometheus = ")
+    assert main(["live", str(tmp_path / "bad.toml")]) == 2
+
+
+def test_checkpoints_load_without_warnings(monkeypatch, caplog, tmp_path):
+    db = str(tmp_path / "runs.db")
+    fake_model(monkeypatch)
+    main(["run", "bad-deploy", "--model", "groq:t", "--pause", "--db", db, "-q"])
+    main(["waiting", "--db", db])
+    assert "unregistered type" not in caplog.text

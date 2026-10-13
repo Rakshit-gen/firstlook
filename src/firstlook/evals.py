@@ -2,10 +2,9 @@
 
 from dataclasses import asdict, dataclass
 
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
-from .agent import build_agent
+from .agent import build_agent, memory
 from .baseline import baseline
 from .env import ScenarioEnv
 from .finding import Finding
@@ -55,7 +54,7 @@ def run_one(model, s: Scenario) -> Score:
     env = ScenarioEnv(s)
     if model is None:
         return score(baseline(env), s)
-    app = build_agent(model, env, checkpointer=InMemorySaver())
+    app = build_agent(model, env, checkpointer=memory())
     cfg = {"configurable": {"thread_id": s.name}}
     out = app.invoke({}, cfg)
     if "__interrupt__" in out:

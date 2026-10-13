@@ -4,6 +4,8 @@ import json
 from typing import Annotated, TypedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -28,6 +30,16 @@ class State(TypedDict, total=False):
 
 
 MAX_TOOL_CALLS = 12
+
+# Checkpoints hold a Finding; saying so lets LangGraph load it back without
+# allowing arbitrary classes.
+SERDE = JsonPlusSerializer(
+    allowed_msgpack_modules=[("firstlook.finding", "Finding"), ("firstlook.finding", "Action")]
+)
+
+
+def memory() -> InMemorySaver:
+    return InMemorySaver(serde=SERDE)
 
 
 def build_agent(

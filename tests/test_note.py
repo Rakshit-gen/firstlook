@@ -1,16 +1,15 @@
 from fakes import calls, scripted
 from langchain_core.messages import AIMessage
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 from test_agent import ENV, GOOD
 
-from firstlook.agent import build_agent
+from firstlook.agent import build_agent, memory
 from firstlook.note import incident_note
 
 
 def run(approved=None):
     model = scripted([calls(("recent_deploys", {"minutes": 90})), AIMessage("deploy")], [GOOD])
-    app = build_agent(model, ENV, checkpointer=InMemorySaver())
+    app = build_agent(model, ENV, checkpointer=memory())
     cfg = {"configurable": {"thread_id": "n"}}
     app.invoke({}, cfg)
     if approved is not None:
