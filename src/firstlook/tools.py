@@ -42,4 +42,31 @@ def make_tools(env: Env) -> list:
             f" ({shift.ratio:.3g}x) at {when:%H:%M} UTC."
         )
 
-    return [list_alerts, query_metric]
+    @tool
+    def search_logs(
+        service: str, contains: str = "", minutes: int = 30, level: str = "error"
+    ) -> str:
+        """Group recent log lines for a service by message, most frequent first, with
+        counts and when each message was first seen. Filter by text and level
+        ("error", "warn", "info" or "any")."""
+        lines = [
+            line
+            for line in env.logs(service, minutes)
+            if (level == "any" or line.level == level) and contains.lower() in line.message.lower()
+        ]
+        if not lines:
+            return f"No {level} logs for {service} in the last {minutes} minutes" + (
+                f" containing {contains!r}." if contains else "."
+            )
+        groups: dict[str, list] = {}
+        for line in lines:
+            groups.setdefault(line.message, []).append(line.time)
+        top = sorted(groups.items(), key=lambda kv: -len(kv[1]))[:5]
+        out = [f"{len(lines)} {level} lines for {service} in the last {minutes} minutes:"]
+        for message, times in top:
+            out.append(f"- {len(times)}x since {min(times):%H:%M:%S} UTC: {message}")
+        if len(groups) > 5:
+            out.append(f"({len(groups) - 5} rarer messages not shown)")
+        return "\n".join(out)
+
+    return [list_alerts, query_metric, search_logs]

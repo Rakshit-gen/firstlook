@@ -26,3 +26,16 @@ def test_query_metric_flat_and_bad_input():
     out = call("query_metric", service="inventory", metric="cpu")
     assert out.endswith("No real change in this window.")
     assert call("query_metric", service="web", metric="vibes").startswith("Unknown metric")
+
+
+def test_search_logs_groups_messages():
+    out = call("search_logs", service="payments", minutes=120).splitlines()
+    assert out[0] == "1525 error lines for payments in the last 120 minutes:"
+    assert out[1].startswith("- 1525x since 14:59:")
+    assert out[1].endswith(
+        "UTC: TypeError: cannot read property 'last4' of undefined at RefundHandler.tokenize"
+    )
+    assert call("search_logs", service="payments", contains="timeout").startswith(
+        "No error logs for payments in the last 30 minutes containing 'timeout'."
+    )
+    assert call("search_logs", service="inventory").startswith("No error logs")
