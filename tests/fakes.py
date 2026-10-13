@@ -4,9 +4,13 @@
 text); `answers` are dicts returned from structured-output calls.
 """
 
+import itertools
+
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
+
+_ids = itertools.count()
 
 
 def calls(*items) -> AIMessage:
@@ -14,8 +18,7 @@ def calls(*items) -> AIMessage:
     return AIMessage(
         content="",
         tool_calls=[
-            {"name": name, "args": args, "id": f"call_{name}_{i}"}
-            for i, (name, args) in enumerate(items)
+            {"name": name, "args": args, "id": f"call_{next(_ids)}"} for name, args in items
         ],
     )
 
