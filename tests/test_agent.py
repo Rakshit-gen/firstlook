@@ -1,5 +1,7 @@
 from fakes import calls, scripted
 from langchain_core.messages import AIMessage
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 
 from firstlook.agent import build_agent
 from firstlook.env import ScenarioEnv
@@ -82,3 +84,25 @@ def test_conclusion_comes_after_the_investigation():
     last_prompt = model.seen[-1]
     assert last_prompt[-1].content.startswith("Now give your conclusion.")
     assert last_prompt[-2].content == "It's the payments deploy."
+
+
+def test_the_action_waits_for_a_person():
+    model = scripted([calls(("recent_deploys", {})), AIMessage("deploy")], [GOOD])
+    app = build_agent(model, ENV, checkpointer=InMemorySaver())
+    cfg = {"configurable": {"thread_id": "inc-1"}}
+    out = app.invoke({}, cfg)
+    (question,) = out["__interrupt__"]
+    assert question.value["action"] == {
+        "kind": "rollback",
+        "service": "payments",
+        "detail": "previous version",
+    }
+    assert "approved" not in out
+    out = app.invoke(Command(resume={"approved": False, "by": "sam"}), cfg)
+    assert out["approved"] is False and out["approver"] == "sam"
+
+
+def test_escalations_need_no_approval():
+    escalate = {**GOOD, "evidence": [], "action": {"kind": "escalate", "service": "payments"}}
+    out = build_agent(scripted([AIMessage("no idea")], [escalate]), ENV).invoke({})
+    assert "__interrupt__" not in out and "approved" not in out

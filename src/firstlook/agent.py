@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
+from langgraph.types import interrupt
 
 from .checks import check_finding
 from .env import Env
@@ -20,6 +21,8 @@ class State(TypedDict, total=False):
     tool_calls: int  # tool calls made so far
     notes: list[str]  # things the run should report about itself
     finding: Finding
+    approved: bool  # a person's answer to the proposed action
+    approver: str
 
 
 MAX_TOOL_CALLS = 12
@@ -84,6 +87,27 @@ def build_agent(model, env: Env, checkpointer=None, max_tool_calls: int = MAX_TO
         finding, notes = check_finding(raw, answers, env.services())
         return {"finding": finding, "notes": [*state.get("notes", []), *notes]}
 
+    def needs_approval(state: State):
+        return "approve" if state["finding"].action.kind not in ("escalate", "none") else END
+
+    def approve(state: State):
+        """Nothing changes in production without a person saying yes. The graph
+        stops here; it resumes with {"approved": bool, "by": name}."""
+        f = state["finding"]
+        answer = interrupt(
+            {
+                "action": f.action.model_dump(),
+                "service": f.service,
+                "cause": f.cause,
+                "summary": f.summary,
+                "confidence": f.confidence,
+                "evidence": f.evidence,
+            }
+        )
+        if not isinstance(answer, dict) or not isinstance(answer.get("approved"), bool):
+            raise ValueError('resume with {"approved": true or false, "by": "name"}')
+        return {"approved": answer["approved"], "approver": str(answer.get("by", "unknown"))}
+
     def over_budget(state: State):
         # Every tool call needs an answer, or the next model call is rejected.
         pending = state["messages"][-1].tool_calls
@@ -113,5 +137,7 @@ def build_agent(model, env: Env, checkpointer=None, max_tool_calls: int = MAX_TO
     g.add_edge("tools", "investigate")
     g.add_node("conclude", conclude)
     g.add_edge("over_budget", "conclude")
-    g.add_edge("conclude", END)
+    g.add_node("approve", approve)
+    g.add_conditional_edges("conclude", needs_approval, ["approve", END])
+    g.add_edge("approve", END)
     return g.compile(checkpointer=checkpointer)
