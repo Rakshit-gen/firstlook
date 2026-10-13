@@ -1,0 +1,33 @@
+{
+  "name": "bad-deploy",
+  "title": "Checkout failing for some customers",
+  "start": "2026-10-01T14:00:00Z",
+  "minutes": 120,
+  "services": {
+    "web": {"depends_on": ["checkout"], "baseline": {"rps": 400}},
+    "checkout": {"depends_on": ["payments", "inventory"], "baseline": {"rps": 120}},
+    "payments": {"depends_on": ["payments-db"], "baseline": {"rps": 90}},
+    "inventory": {"depends_on": [], "baseline": {"rps": 150}},
+    "payments-db": {"depends_on": [], "baseline": {"rps": 300, "p99_ms": 12}}
+  },
+  "deploys": [
+    {"service": "inventory", "version": "v3.2.1", "at": 20, "change": "Bump logging library"},
+    {"service": "payments", "version": "v2.14.0", "at": 58,
+     "change": "Refactor refund handler to the new card token format"}
+  ],
+  "effects": [
+    {"service": "payments", "metric": "error_rate", "to": 0.21, "at": 59},
+    {"service": "checkout", "metric": "error_rate", "to": 0.14, "at": 59},
+    {"service": "web", "metric": "error_rate", "to": 0.04, "at": 60}
+  ],
+  "logs": [
+    {"service": "payments", "at": 59, "per_minute": 25,
+     "message": "TypeError: cannot read property 'last4' of undefined at RefundHandler.tokenize"},
+    {"service": "checkout", "at": 59, "per_minute": 15,
+     "message": "upstream payments returned 500 for POST /charges"}
+  ],
+  "truth": {"service": "payments", "cause": "deploy", "fix": "rollback"},
+  "runbooks": {
+    "payments": "Errors right after a deploy: roll back to the previous version first, investigate after."
+  }
+}
