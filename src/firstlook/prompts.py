@@ -17,3 +17,9 @@ How to work:
 
 def brief(alerts_text: str, now: str) -> str:
     return f"It is {now} UTC. You've been paged.\n\nCurrent alerts:\n{alerts_text}"
+
+
+CONCLUDE = """Now give your conclusion. Name the service where the problem starts,
+the kind of cause, and the one action most likely to fix it. Quote evidence
+exactly as it appeared in tool answers. If the evidence doesn't point anywhere,
+say cause unknown, confidence low, and escalate."""

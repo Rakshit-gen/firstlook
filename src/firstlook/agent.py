@@ -9,7 +9,8 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from .env import Env
-from .prompts import SYSTEM, brief
+from .finding import Finding
+from .prompts import CONCLUDE, SYSTEM, brief
 from .tools import make_tools
 
 
@@ -17,6 +18,7 @@ class State(TypedDict, total=False):
     messages: Annotated[list, add_messages]
     tool_calls: int  # tool calls made so far
     notes: list[str]  # things the run should report about itself
+    finding: Finding
 
 
 MAX_TOOL_CALLS = 12
@@ -73,6 +75,11 @@ def build_agent(model, env: Env, checkpointer=None, max_tool_calls: int = MAX_TO
             out += runner.invoke({"messages": [AIMessage("", tool_calls=fresh)]})["messages"]
         return {"messages": out}
 
+    concluder = model.with_structured_output(Finding).with_retry(stop_after_attempt=3)
+
+    def conclude(state: State):
+        return {"finding": concluder.invoke([*state["messages"], HumanMessage(CONCLUDE)])}
+
     def over_budget(state: State):
         # Every tool call needs an answer, or the next model call is rejected.
         pending = state["messages"][-1].tool_calls
@@ -96,9 +103,11 @@ def build_agent(model, env: Env, checkpointer=None, max_tool_calls: int = MAX_TO
     g.add_edge(START, "intake")
     g.add_edge("intake", "investigate")
     g.add_conditional_edges(
-        "investigate", route, {"tools": "count", "over_budget": "over_budget", END: END}
+        "investigate", route, {"tools": "count", "over_budget": "over_budget", END: "conclude"}
     )
     g.add_edge("count", "tools")
     g.add_edge("tools", "investigate")
-    g.add_edge("over_budget", END)
+    g.add_node("conclude", conclude)
+    g.add_edge("over_budget", "conclude")
+    g.add_edge("conclude", END)
     return g.compile(checkpointer=checkpointer)
