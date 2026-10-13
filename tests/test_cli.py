@@ -107,3 +107,10 @@ def test_pause_then_decide_later(monkeypatch, capsys, tmp_path):
 
 def test_pause_needs_a_model(capsys):
     assert main(["run", "bad-deploy", "--model", "rules", "--pause"]) == 2
+
+
+def test_note_to_a_file(tmp_path, capsys):
+    out = tmp_path / "note.md"
+    assert main(["run", "bad-deploy", "--model", "rules", "-o", str(out)]) == 0
+    assert out.read_text().startswith("# Checkout failing for some customers")
+    assert capsys.readouterr().out == ""

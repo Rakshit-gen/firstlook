@@ -86,6 +86,14 @@ def model_spec(args) -> str:
     return DEFAULT_MODEL if os.environ.get("GROQ_API_KEY") else "rules"
 
 
+def write_note(note: str, path: str | None) -> None:
+    if path:
+        Path(path).write_text(note)
+        print(f"wrote {path}", file=sys.stderr)
+    else:
+        print(note, end="")
+
+
 def saver(path: str) -> SqliteSaver:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     return SqliteSaver(sqlite3.connect(path, check_same_thread=False))
@@ -103,7 +111,7 @@ def cmd_run(args) -> int:
     spec = model_spec(args)
     if spec == "rules":
         state = {"finding": baseline(env), "notes": ["rules only: no model was used"]}
-        print(incident_note(state, env, scenario.title), end="")
+        write_note(incident_note(state, env, scenario.title), args.output)
         return 0
     checkpointer = saver(args.db) if args.pause else InMemorySaver()
     app = build_agent(
@@ -125,7 +133,7 @@ def cmd_run(args) -> int:
         else:
             answer = ask_approval(question.value)
         question = drive(app, Command(resume=answer), cfg, args.quiet)
-    print(incident_note(app.get_state(cfg).values, env, scenario.title), end="")
+    write_note(incident_note(app.get_state(cfg).values, env, scenario.title), args.output)
     return 0
 
 
@@ -148,7 +156,7 @@ def cmd_decide(args) -> int:
     answer = {"approved": args.decision == "yes", "by": args.by or getpass.getuser()}
     meta = {k: saved.metadata[k] for k in ("scenario", "model")}
     app.invoke(Command(resume=answer), {**cfg, "metadata": meta})
-    print(incident_note(app.get_state(cfg).values, env, scenario.title), end="")
+    write_note(incident_note(app.get_state(cfg).values, env, scenario.title), args.output)
     return 0
 
 
@@ -196,6 +204,7 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="save the run at the approval step instead of asking; finish it with decide",
     )
+    s.add_argument("-o", "--output", help="write the incident note to this file")
     s.add_argument("--db", default=default_db(), help="where paused runs are kept")
     s.set_defaults(func=cmd_run)
 
@@ -203,6 +212,7 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("thread", help="the name printed by run --pause")
     s.add_argument("decision", choices=["yes", "no"])
     s.add_argument("--by", help="who decided (default: your user name)")
+    s.add_argument("-o", "--output", help="write the incident note to this file")
     s.add_argument("--db", default=default_db(), help="where paused runs are kept")
     s.set_defaults(func=cmd_decide)
 
