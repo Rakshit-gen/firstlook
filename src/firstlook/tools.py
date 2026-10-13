@@ -1,6 +1,8 @@
 """The tools the agent can call. Each returns a short plain-text answer: the
 model reads text, and short answers keep the context small."""
 
+import functools
+
 from langchain_core.tools import tool
 
 from .env import Env
@@ -10,8 +12,23 @@ from .shift import find_shift
 REAL_CHANGE = 5.0  # shift score above which a change is more than noise
 
 
+def friendly(fn):
+    """Turn a bad argument into an answer the model can correct itself from,
+    instead of an exception that ends the run."""
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except KeyError as e:
+            return f"Error: {e.args[0]}"
+
+    return wrapper
+
+
 def make_tools(env: Env) -> list:
     @tool
+    @friendly
     def list_alerts() -> str:
         """List the alerts that are firing, oldest first, with the system's services."""
         alerts = env.alerts()
@@ -20,6 +37,7 @@ def make_tools(env: Env) -> list:
         return "\n".join(lines)
 
     @tool
+    @friendly
     def query_metric(service: str, metric: str, minutes: int = 60) -> str:
         """Summarise one metric for one service over the last `minutes`: its level now,
         and whether and when it changed. Metrics: rps, error_rate, p99_ms, cpu, memory,
@@ -43,6 +61,7 @@ def make_tools(env: Env) -> list:
         )
 
     @tool
+    @friendly
     def search_logs(
         service: str, contains: str = "", minutes: int = 30, level: str = "error"
     ) -> str:
@@ -70,6 +89,7 @@ def make_tools(env: Env) -> list:
         return "\n".join(out)
 
     @tool
+    @friendly
     def recent_deploys(minutes: int = 120, service: str = "") -> str:
         """List deploys in the last `minutes`, newest first, optionally for one service."""
         found = [(t, d) for t, d in env.deploys(minutes) if not service or d.service == service]
@@ -84,6 +104,7 @@ def make_tools(env: Env) -> list:
         return "\n".join(out)
 
     @tool
+    @friendly
     def dependencies(service: str) -> str:
         """What a service calls, and what calls it. Errors often start in a dependency
         and show up in everything above it."""
@@ -95,6 +116,7 @@ def make_tools(env: Env) -> list:
         )
 
     @tool
+    @friendly
     def read_runbook(service: str) -> str:
         """The team's runbook notes for a service, if there are any."""
         text = env.runbook(service)

@@ -60,3 +60,12 @@ def test_dependencies_both_ways():
 def test_runbook():
     assert call("read_runbook", service="payments").startswith("Errors right after a deploy")
     assert call("read_runbook", service="web") == "No runbook for web."
+
+
+def test_a_wrong_service_name_is_an_answer_not_a_crash():
+    for name in ("query_metric", "search_logs", "dependencies", "read_runbook"):
+        args = {"service": "paymnts"}
+        if name == "query_metric":
+            args["metric"] = "cpu"
+        out = call(name, **args)
+        assert out.startswith("Error: no service 'paymnts' (have: checkout,"), name
