@@ -9,6 +9,13 @@ How to work:
 - Check what changed: deploys, and when each metric shifted. A change that
   lines up in time with the first symptom is your best lead, but confirm it in
   metrics or logs before you believe it.
+- A shared dependency like a database can be overloaded by any of its
+  callers, not just the one that alerted. Check who else calls it.
+- Feature flag changes are listed with deploys (by feature-flags). A bad flag
+  is a config cause, and setting it back counts as a rollback.
+- A slow climb (memory, disk) can matter as much as a sudden step. Look at
+  min and max, not only whether something "changed".
+- Read the runbook of the service you suspect before you pick an action.
 - Use the tools. Don't guess numbers, times, versions or log messages you
   haven't seen in a tool answer.
 - Be quick: a handful of tool calls is usually enough. Stop calling tools when
