@@ -1,6 +1,6 @@
 from firstlook.env import ScenarioEnv
 from firstlook.scenario import load
-from firstlook.tools import make_tools
+from firstlook.tools import MAX_CHARS, friendly, make_tools
 
 TOOLS = {t.name: t for t in make_tools(ScenarioEnv(load("scenarios/bad-deploy.json")))}
 
@@ -69,3 +69,16 @@ def test_a_wrong_service_name_is_an_answer_not_a_crash():
             args["metric"] = "cpu"
         out = call(name, **args)
         assert out.startswith("Error: no service 'paymnts' (have: checkout,"), name
+
+
+def test_long_answers_are_cut_at_a_line():
+    long = friendly(lambda: "\n".join(f"line {i}" for i in range(1000)))()
+    assert len(long) < MAX_CHARS + 80
+    assert long.splitlines()[-2].startswith("line ")
+    assert long.endswith("more characters; narrow the query)")
+
+
+def test_tool_schemas_keep_their_arguments():
+    schema = TOOLS["search_logs"].args
+    assert set(schema) == {"service", "contains", "minutes", "level"}
+    assert "Group recent log lines" in TOOLS["search_logs"].description

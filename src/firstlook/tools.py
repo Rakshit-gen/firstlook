@@ -10,6 +10,7 @@ from .scenario import METRICS
 from .shift import find_shift
 
 REAL_CHANGE = 5.0  # shift score above which a change is more than noise
+MAX_CHARS = 1500  # longest tool answer; the rest is cut so one call can't flood the context
 
 
 def friendly(fn):
@@ -19,9 +20,13 @@ def friendly(fn):
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         try:
-            return fn(*args, **kwargs)
+            out = fn(*args, **kwargs)
         except KeyError as e:
             return f"Error: {e.args[0]}"
+        if len(out) > MAX_CHARS:
+            cut = out[:MAX_CHARS].rsplit("\n", 1)[0]
+            out = f"{cut}\n(cut: {len(out) - len(cut)} more characters; narrow the query)"
+        return out
 
     return wrapper
 
