@@ -6,6 +6,7 @@ import functools
 from langchain_core.tools import tool
 
 from .env import Env
+from .prom import PromError
 from .scenario import METRICS
 from .shift import find_shift
 
@@ -23,6 +24,8 @@ def friendly(fn):
             out = fn(*args, **kwargs)
         except KeyError as e:
             return f"Error: {e.args[0]}"
+        except PromError as e:  # e.g. a range too long for Prometheus's point limit
+            return f"Error from Prometheus: {e}"
         if len(out) > MAX_CHARS:
             cut = out[:MAX_CHARS].rsplit("\n", 1)[0]
             out = f"{cut}\n(cut: {len(out) - len(cut)} more characters; narrow the query)"

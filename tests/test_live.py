@@ -92,3 +92,17 @@ def test_the_example_config_is_valid():
     assert env.services() == ["checkout", "payments", "web"]
     assert [d.version for _, d in env.deploys(60)] == ["v2.14.0"]
     assert env.runbook("payments").startswith("Errors right after a deploy")
+
+
+def test_a_prometheus_error_is_an_answer_not_a_crash(tmp_path):
+    q = ERRORS.replace("{service}", "api")
+    fake = FakeProm({q: "exceeded maximum resolution of 11,000 points per timeseries"})
+    config = {"prometheus": fake.url, "queries": {"error_rate": ERRORS}, "services": {"api": {}}}
+    try:
+        tools = {t.name: t for t in make_tools(LiveEnv(config, tmp_path, now=NOW))}
+        out = tools["query_metric"].invoke(
+            {"service": "api", "metric": "error_rate", "minutes": 20000}
+        )
+    finally:
+        fake.close()
+    assert out.startswith("Error from Prometheus: bad_data: exceeded maximum resolution")
