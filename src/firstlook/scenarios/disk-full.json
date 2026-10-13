@@ -1,0 +1,30 @@
+{
+  "name": "disk-full",
+  "title": "Event ingest dropping events",
+  "start": "2026-10-05T06:00:00Z",
+  "minutes": 120,
+  "services": {
+    "collector": {"depends_on": ["ingest"], "baseline": {"rps": 900}},
+    "ingest": {"depends_on": ["events-db"], "baseline": {"rps": 900}},
+    "events-db": {"depends_on": [], "baseline": {"rps": 900, "p99_ms": 8}}
+  },
+  "deploys": [
+    {"service": "ingest", "version": "v4.7.0", "at": 15,
+     "change": "Log every parsed event at debug level to chase a parser bug"}
+  ],
+  "effects": [
+    {"service": "ingest", "metric": "disk_used", "to": 0.99, "at": 16, "ramp": 64},
+    {"service": "ingest", "metric": "error_rate", "to": 0.35, "at": 80},
+    {"service": "collector", "metric": "error_rate", "to": 0.2, "at": 80}
+  ],
+  "logs": [
+    {"service": "ingest", "at": 16, "until": 80, "per_minute": 30, "level": "debug",
+     "message": "parsed event batch: 900 events, writing full payloads to /var/log/ingest/parser.log"},
+    {"service": "ingest", "at": 80, "per_minute": 30,
+     "message": "write /var/log/ingest/parser.log: no space left on device"}
+  ],
+  "truth": {"service": "ingest", "cause": "deploy", "fix": "rollback"},
+  "runbooks": {
+    "ingest": "Disk full: find what is writing. Deleting old logs buys an hour; stopping the writer fixes it."
+  }
+}

@@ -43,3 +43,10 @@ def test_baseline_reads_an_expired_certificate_as_traffic():
     # drop in users-db traffic, and the rules can't tell a drop from a flood.
     f = baseline(ScenarioEnv(builtin("cert-expiry")))
     assert (f.service, f.cause, f.action.kind) == ("users-db", "traffic", "rate_limit")
+
+
+def test_baseline_misses_a_slow_disk_fill():
+    # A known miss: the shift detector looks for steps, and a disk filling over
+    # an hour isn't one, so the first change it sees is the errors at the end.
+    f = baseline(ScenarioEnv(builtin("disk-full")))
+    assert (f.service, f.cause, f.action.kind) == ("ingest", "unknown", "escalate")
