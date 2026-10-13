@@ -43,6 +43,33 @@ def ask_approval(question: dict, ask=None) -> dict:
             return {"approved": answer in ("y", "yes"), "by": getpass.getuser()}
 
 
+def progress(node: str, update: dict) -> str | None:
+    """One line about what a graph step did, for people watching a run."""
+    if node == "investigate":
+        calls = update["messages"][-1].tool_calls
+        if calls:
+            return "  " + ", ".join(
+                c["name"] + "(" + ", ".join(f"{k}={v}" for k, v in c["args"].items()) + ")"
+                for c in calls
+            )
+        return "  done looking; writing up"
+    if node == "over_budget":
+        return "  out of tool calls; writing up with what it has"
+    return None
+
+
+def drive(app, inp, cfg, quiet: bool):
+    """Run the graph until it ends or stops for a question; return the question."""
+    for chunk in app.stream(inp, cfg, stream_mode="updates"):
+        for node, update in chunk.items():
+            if node == "__interrupt__":
+                return update[0]
+            line = progress(node, update or {})
+            if line and not quiet:
+                print(line, file=sys.stderr)
+    return None
+
+
 def model_spec(args) -> str:
     if args.model:
         return args.model
@@ -61,14 +88,15 @@ def cmd_run(args) -> int:
         make_model(spec), env, checkpointer=InMemorySaver(), executor=ScenarioExecutor(scenario)
     )
     cfg = {"configurable": {"thread_id": scenario.name}}
-    out = app.invoke({}, cfg)
-    while "__interrupt__" in out:
-        (question,) = out["__interrupt__"]
+    if not args.quiet:
+        print(f"Investigating {scenario.name} with {spec}", file=sys.stderr)
+    question = drive(app, {}, cfg, args.quiet)
+    while question is not None:
         if args.approve:
             answer = {"approved": True, "by": "--approve"}
         else:
             answer = ask_approval(question.value)
-        out = app.invoke(Command(resume=answer), cfg)
+        question = drive(app, Command(resume=answer), cfg, args.quiet)
     print(incident_note(app.get_state(cfg).values, env, scenario.title), end="")
     return 0
 
@@ -94,6 +122,7 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument(
         "--approve", action="store_true", help="approve the proposed action without asking"
     )
+    s.add_argument("-q", "--quiet", action="store_true", help="don't show progress")
     s.set_defaults(func=cmd_run)
     return p
 

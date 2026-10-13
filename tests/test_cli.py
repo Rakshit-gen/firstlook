@@ -61,3 +61,15 @@ def test_default_model_depends_on_the_key(monkeypatch, capsys):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     main(["run", "bad-deploy"])
     assert "rules only" in capsys.readouterr().out
+
+
+def test_progress_goes_to_stderr(monkeypatch, capsys):
+    fake_model(monkeypatch)
+    main(["run", "bad-deploy", "--model", "groq:test", "--approve"])
+    err = capsys.readouterr().err
+    assert "Investigating bad-deploy with groq:test" in err
+    assert "  recent_deploys()" in err
+    assert "  done looking; writing up" in err
+    fake_model(monkeypatch)
+    main(["run", "bad-deploy", "--model", "groq:test", "--approve", "-q"])
+    assert capsys.readouterr().err == ""
