@@ -4,9 +4,13 @@ import argparse
 import getpass
 import json
 import os
+import sqlite3
 import sys
+import uuid
+from pathlib import Path
 
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 from . import __version__
@@ -32,13 +36,17 @@ def cmd_scenarios(args) -> int:
     return 0
 
 
-def ask_approval(question: dict, ask=None) -> dict:
-    ask = ask or input
+def show_proposal(question: dict) -> None:
     action = Action(**question["action"])
     print(f"\nProposed: {describe(action)}  ({question['confidence']} confidence)")
     print(f"  {question['summary']}")
     for q in question["evidence"]:
         print(f"  evidence: {q}")
+
+
+def ask_approval(question: dict, ask=None) -> dict:
+    ask = ask or input
+    show_proposal(question)
     while True:
         answer = ask("Do it? [y/N] ").strip().lower()
         if answer in ("y", "yes", "n", "no", ""):
@@ -78,7 +86,18 @@ def model_spec(args) -> str:
     return DEFAULT_MODEL if os.environ.get("GROQ_API_KEY") else "rules"
 
 
+def saver(path: str) -> SqliteSaver:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    return SqliteSaver(sqlite3.connect(path, check_same_thread=False))
+
+
+def default_db() -> str:
+    return os.environ.get("FIRSTLOOK_DB", str(Path.home() / ".firstlook" / "runs.db"))
+
+
 def cmd_run(args) -> int:
+    if args.pause and model_spec(args) == "rules":
+        raise ValueError("--pause needs a model: the rules baseline doesn't stop to ask")
     scenario = pick(args.scenario)
     env = ScenarioEnv(scenario)
     spec = model_spec(args)
@@ -86,19 +105,49 @@ def cmd_run(args) -> int:
         state = {"finding": baseline(env), "notes": ["rules only: no model was used"]}
         print(incident_note(state, env, scenario.title), end="")
         return 0
+    checkpointer = saver(args.db) if args.pause else InMemorySaver()
     app = build_agent(
-        make_model(spec), env, checkpointer=InMemorySaver(), executor=ScenarioExecutor(scenario)
+        make_model(spec), env, checkpointer=checkpointer, executor=ScenarioExecutor(scenario)
     )
-    cfg = {"configurable": {"thread_id": scenario.name}}
+    thread = f"{scenario.name}-{uuid.uuid4().hex[:6]}"
+    where = str(Path(args.scenario).resolve()) if args.scenario.endswith(".json") else scenario.name
+    cfg = {"configurable": {"thread_id": thread}, "metadata": {"scenario": where, "model": spec}}
     if not args.quiet:
         print(f"Investigating {scenario.name} with {spec}", file=sys.stderr)
     question = drive(app, {}, cfg, args.quiet)
+    if question is not None and args.pause:
+        show_proposal(question.value)
+        print(f"\nSaved as {thread}. Decide later with: firstlook decide {thread} yes|no")
+        return 0
     while question is not None:
         if args.approve:
             answer = {"approved": True, "by": "--approve"}
         else:
             answer = ask_approval(question.value)
         question = drive(app, Command(resume=answer), cfg, args.quiet)
+    print(incident_note(app.get_state(cfg).values, env, scenario.title), end="")
+    return 0
+
+
+def cmd_decide(args) -> int:
+    checkpointer = saver(args.db)
+    cfg = {"configurable": {"thread_id": args.thread}}
+    saved = checkpointer.get_tuple(cfg)
+    if saved is None:
+        raise ValueError(f"no saved run {args.thread!r} in {args.db}")
+    scenario = pick(saved.metadata["scenario"])
+    env = ScenarioEnv(scenario)
+    app = build_agent(
+        make_model(saved.metadata["model"]),
+        env,
+        checkpointer=checkpointer,
+        executor=ScenarioExecutor(scenario),
+    )
+    if "approve" not in app.get_state(cfg).next:
+        raise ValueError(f"{args.thread} is not waiting for a decision")
+    answer = {"approved": args.decision == "yes", "by": args.by or getpass.getuser()}
+    meta = {k: saved.metadata[k] for k in ("scenario", "model")}
+    app.invoke(Command(resume=answer), {**cfg, "metadata": meta})
     print(incident_note(app.get_state(cfg).values, env, scenario.title), end="")
     return 0
 
@@ -142,7 +191,20 @@ def parser() -> argparse.ArgumentParser:
         "--approve", action="store_true", help="approve the proposed action without asking"
     )
     s.add_argument("-q", "--quiet", action="store_true", help="don't show progress")
+    s.add_argument(
+        "--pause",
+        action="store_true",
+        help="save the run at the approval step instead of asking; finish it with decide",
+    )
+    s.add_argument("--db", default=default_db(), help="where paused runs are kept")
     s.set_defaults(func=cmd_run)
+
+    s = sub.add_parser("decide", help="approve or decline a paused run")
+    s.add_argument("thread", help="the name printed by run --pause")
+    s.add_argument("decision", choices=["yes", "no"])
+    s.add_argument("--by", help="who decided (default: your user name)")
+    s.add_argument("--db", default=default_db(), help="where paused runs are kept")
+    s.set_defaults(func=cmd_decide)
 
     s = sub.add_parser("eval", help="score runs against the scenarios' known answers")
     s.add_argument("scenario", nargs="*", help="scenarios to run (default: all built-in)")

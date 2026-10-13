@@ -86,3 +86,24 @@ def test_eval_rules(monkeypatch, capsys):
     main(["eval", "bad-deploy", "-q", "--json"])
     data = json.loads(capsys.readouterr().out)
     assert data["scores"][0]["solved"] is True
+
+
+def test_pause_then_decide_later(monkeypatch, capsys, tmp_path):
+    db = str(tmp_path / "runs.db")
+    fake_model(monkeypatch)
+    assert main(["run", "bad-deploy", "--model", "groq:test", "--pause", "--db", db, "-q"]) == 0
+    out = capsys.readouterr().out
+    assert "Proposed: roll back payments" in out
+    thread = out.split("Saved as ")[1].split(".")[0]
+    assert thread.startswith("bad-deploy-")
+    # A fresh process: nothing carried over but the database.
+    fake_model(monkeypatch)
+    assert main(["decide", thread, "yes", "--by", "sam", "--db", db]) == 0
+    assert "Approved by sam." in capsys.readouterr().out
+    assert main(["decide", thread, "no", "--db", db]) == 2
+    assert "not waiting for a decision" in capsys.readouterr().err
+    assert main(["decide", "nope", "yes", "--db", db]) == 2
+
+
+def test_pause_needs_a_model(capsys):
+    assert main(["run", "bad-deploy", "--model", "rules", "--pause"]) == 2
