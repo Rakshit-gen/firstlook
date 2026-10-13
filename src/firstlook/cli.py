@@ -2,6 +2,7 @@
 
 import argparse
 import getpass
+import json
 import os
 import sys
 
@@ -12,6 +13,7 @@ from . import __version__
 from .agent import build_agent
 from .baseline import baseline
 from .env import ScenarioEnv
+from .evals import run_one, table
 from .executor import ScenarioExecutor, describe
 from .finding import Action
 from .llm import DEFAULT_MODEL, make_model
@@ -101,6 +103,23 @@ def cmd_run(args) -> int:
     return 0
 
 
+def cmd_eval(args) -> int:
+    scenarios = [pick(n) for n in args.scenario] or load_all(SCENARIOS)
+    spec = model_spec(args)
+    model = None if spec == "rules" else make_model(spec)
+    scores = []
+    for s in scenarios:
+        if not args.quiet:
+            print(f"{s.name} ...", file=sys.stderr)
+        scores.append(run_one(model, s))
+    if args.json:
+        print(json.dumps({"model": spec, "scores": [s.to_dict() for s in scores]}, indent=2))
+    else:
+        print(f"model: {spec}")
+        print(table(scores), end="")
+    return 0 if all(s.solved for s in scores) else 1
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="firstlook",
@@ -124,6 +143,13 @@ def parser() -> argparse.ArgumentParser:
     )
     s.add_argument("-q", "--quiet", action="store_true", help="don't show progress")
     s.set_defaults(func=cmd_run)
+
+    s = sub.add_parser("eval", help="score runs against the scenarios' known answers")
+    s.add_argument("scenario", nargs="*", help="scenarios to run (default: all built-in)")
+    s.add_argument("--model", help="rules, or groq:<model id> (same default as run)")
+    s.add_argument("--json", action="store_true", help="print the scores as JSON")
+    s.add_argument("-q", "--quiet", action="store_true", help="don't show progress")
+    s.set_defaults(func=cmd_eval)
     return p
 
 

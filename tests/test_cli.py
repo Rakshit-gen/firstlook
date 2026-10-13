@@ -1,3 +1,5 @@
+import json
+
 from fakes import calls, scripted
 from langchain_core.messages import AIMessage
 
@@ -73,3 +75,14 @@ def test_progress_goes_to_stderr(monkeypatch, capsys):
     fake_model(monkeypatch)
     main(["run", "bad-deploy", "--model", "groq:test", "--approve", "-q"])
     assert capsys.readouterr().err == ""
+
+
+def test_eval_rules(monkeypatch, capsys):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    assert main(["eval", "bad-deploy", "-q"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("model: rules\n")
+    assert "solved 1/1, harmful actions 0" in out
+    main(["eval", "bad-deploy", "-q", "--json"])
+    data = json.loads(capsys.readouterr().out)
+    assert data["scores"][0]["solved"] is True
