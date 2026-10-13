@@ -1,0 +1,1 @@
+{"time": "2026-10-09T11:49:12Z", "service": "payments", "level": "error", "message": "TypeError: cannot read property 'last4' of undefined"}

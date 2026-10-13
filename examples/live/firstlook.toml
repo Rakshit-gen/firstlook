@@ -1,0 +1,24 @@
+# Point firstlook at a real system. Run with: firstlook live examples/live/firstlook.toml
+prometheus = "http://localhost:9090"
+deploys = "deploys.jsonl"
+logs = "logs.jsonl"
+runbooks = "runbooks"
+
+# One PromQL query per metric; {service} is replaced with the service name.
+# These use common names (an HTTP request counter and histogram, cAdvisor and
+# kube-state-metrics); change them to match yours. Leave a metric out and the
+# agent is told there is no data for it.
+[queries]
+rps = 'sum(rate(http_requests_total{service="{service}"}[1m]))'
+error_rate = 'sum(rate(http_requests_total{service="{service}",code=~"5.."}[1m])) / sum(rate(http_requests_total{service="{service}"}[1m]))'
+p99_ms = '1000 * histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{service="{service}"}[5m])))'
+cpu = 'sum(rate(container_cpu_usage_seconds_total{container="{service}"}[1m])) / sum(kube_pod_container_resource_limits{container="{service}",resource="cpu"})'
+memory = 'sum(container_memory_working_set_bytes{container="{service}"}) / sum(kube_pod_container_resource_limits{container="{service}",resource="memory"})'
+
+[services.web]
+depends_on = ["checkout"]
+
+[services.checkout]
+depends_on = ["payments"]
+
+[services.payments]

@@ -1,5 +1,7 @@
 import json
+import tomllib
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from promfake import FakeProm
@@ -81,3 +83,12 @@ def test_config_mistakes_are_named(tmp_path):
         LiveEnv({"services": {}}, tmp_path)
     with pytest.raises(ValueError, match="unknown metric in \\[queries\\]: errors"):
         LiveEnv({"prometheus": "x", "services": {}, "queries": {"errors": "q"}}, tmp_path)
+
+
+def test_the_example_config_is_valid():
+    path = Path(__file__).parent.parent / "examples" / "live" / "firstlook.toml"
+    config = tomllib.loads(path.read_text())
+    env = LiveEnv(config, path.parent, prom=object(), now=NOW)  # never queried here
+    assert env.services() == ["checkout", "payments", "web"]
+    assert [d.version for _, d in env.deploys(60)] == ["v2.14.0"]
+    assert env.runbook("payments").startswith("Errors right after a deploy")
