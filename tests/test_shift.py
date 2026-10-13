@@ -3,12 +3,12 @@ import random
 import pytest
 
 from firstlook.generate import series
-from firstlook.scenario import load
+from firstlook.scenario import builtin
 from firstlook.shift import find_shift
 
 
 def test_finds_the_step_in_the_bad_deploy():
-    s = load("scenarios/bad-deploy.json")
+    s = builtin("bad-deploy")
     shift = find_shift(series(s, "payments", "error_rate"))
     assert shift.index == 59
     assert shift.after / shift.before == pytest.approx(105, rel=0.05)

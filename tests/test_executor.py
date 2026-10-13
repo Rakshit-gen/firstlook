@@ -1,6 +1,6 @@
 from firstlook.executor import DryRun, ScenarioExecutor
 from firstlook.finding import Action
-from firstlook.scenario import load
+from firstlook.scenario import builtin
 
 ROLLBACK = Action(kind="rollback", service="payments", detail="to v2.13.2")
 
@@ -12,7 +12,7 @@ def test_dry_run_records_and_changes_nothing():
 
 
 def test_scenario_executor_knows_the_real_fix():
-    ex = ScenarioExecutor(load("scenarios/bad-deploy.json"))
+    ex = ScenarioExecutor(builtin("bad-deploy"))
     assert ex.run(ROLLBACK).endswith("the alerts cleared")
     assert ex.run(Action(kind="restart", service="payments")).endswith("still firing")
     assert ex.run(Action(kind="rollback", service="inventory")).endswith("still firing")

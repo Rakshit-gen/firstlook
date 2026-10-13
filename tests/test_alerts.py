@@ -1,7 +1,7 @@
 from firstlook.alerts import fired
-from firstlook.scenario import load
+from firstlook.scenario import builtin
 
-S = load("scenarios/bad-deploy.json")
+S = builtin("bad-deploy")
 
 
 def test_error_alerts_fire_after_the_hold_time():

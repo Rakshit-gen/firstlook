@@ -3,9 +3,9 @@ from dataclasses import replace
 import pytest
 
 from firstlook.generate import logs, series
-from firstlook.scenario import Effect, load
+from firstlook.scenario import Effect, builtin
 
-S = load("scenarios/bad-deploy.json")
+S = builtin("bad-deploy")
 
 
 def test_baseline_then_step():

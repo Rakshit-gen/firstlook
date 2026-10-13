@@ -119,3 +119,15 @@ def load(path) -> Scenario:
 
 def load_all(directory) -> list[Scenario]:
     return [load(p) for p in sorted(Path(directory).glob("*.json"))]
+
+
+SCENARIOS = Path(__file__).parent / "scenarios"
+
+
+def builtin(name: str) -> Scenario:
+    """One of the scenarios that ship with firstlook, by name."""
+    path = SCENARIOS / f"{name}.json"
+    if not path.exists():
+        names = ", ".join(p.stem for p in sorted(SCENARIOS.glob("*.json")))
+        raise ScenarioError(f"no scenario {name!r} (have: {names})")
+    return load(path)

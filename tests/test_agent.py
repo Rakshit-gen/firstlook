@@ -6,9 +6,9 @@ from langgraph.types import Command
 from firstlook.agent import build_agent
 from firstlook.env import ScenarioEnv
 from firstlook.executor import DryRun
-from firstlook.scenario import load
+from firstlook.scenario import builtin
 
-ENV = ScenarioEnv(load("scenarios/bad-deploy.json"))
+ENV = ScenarioEnv(builtin("bad-deploy"))
 
 GOOD = {
     "service": "payments",

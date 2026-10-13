@@ -1,8 +1,8 @@
 from firstlook.env import ScenarioEnv
-from firstlook.scenario import load
+from firstlook.scenario import builtin
 from firstlook.tools import MAX_CHARS, friendly, make_tools
 
-TOOLS = {t.name: t for t in make_tools(ScenarioEnv(load("scenarios/bad-deploy.json")))}
+TOOLS = {t.name: t for t in make_tools(ScenarioEnv(builtin("bad-deploy")))}
 
 
 def call(name, **args):

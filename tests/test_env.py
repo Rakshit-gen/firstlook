@@ -1,9 +1,9 @@
 import pytest
 
 from firstlook.env import ScenarioEnv
-from firstlook.scenario import load
+from firstlook.scenario import builtin
 
-ENV = ScenarioEnv(load("scenarios/bad-deploy.json"))
+ENV = ScenarioEnv(builtin("bad-deploy"))
 
 
 def test_windows_count_back_from_now():
