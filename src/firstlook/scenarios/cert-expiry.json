@@ -1,0 +1,28 @@
+{
+  "name": "cert-expiry",
+  "title": "Every login failing at the gateway",
+  "start": "2026-10-04T11:00:00Z",
+  "minutes": 120,
+  "services": {
+    "gateway": {"depends_on": ["auth", "catalog"], "baseline": {"rps": 500}},
+    "auth": {"depends_on": ["users-db"], "baseline": {"rps": 140}},
+    "catalog": {"depends_on": [], "baseline": {"rps": 260}},
+    "users-db": {"depends_on": [], "baseline": {"rps": 150, "p99_ms": 10}}
+  },
+  "deploys": [
+    {"service": "catalog", "version": "v8.0.3", "at": 35, "change": "Cache category pages for 60s"}
+  ],
+  "effects": [
+    {"service": "gateway", "metric": "error_rate", "to": 0.27, "at": 60},
+    {"service": "auth", "metric": "rps", "to": 3, "at": 60},
+    {"service": "users-db", "metric": "rps", "to": 10, "at": 60}
+  ],
+  "logs": [
+    {"service": "gateway", "at": 60, "per_minute": 40,
+     "message": "upstream auth.internal:443: x509: certificate has expired or is not yet valid (notAfter 2026-10-04T12:00:00Z)"}
+  ],
+  "truth": {"service": "auth", "cause": "certificate", "fix": "escalate"},
+  "runbooks": {
+    "auth": "Certificates for *.internal are renewed by the platform team. Page them; there is no rollback for an expired certificate."
+  }
+}

@@ -36,3 +36,10 @@ def test_tie_goes_to_the_called_service_whatever_the_names():
 def test_baseline_escalates_to_the_vendor_not_the_fresh_release():
     f = baseline(ScenarioEnv(builtin("slow-vendor")))
     assert (f.service, f.cause, f.action.kind) == ("geo-vendor", "dependency", "escalate")
+
+
+def test_baseline_reads_an_expired_certificate_as_traffic():
+    # A known miss: requests stop reaching auth, so the deepest change is a
+    # drop in users-db traffic, and the rules can't tell a drop from a flood.
+    f = baseline(ScenarioEnv(builtin("cert-expiry")))
+    assert (f.service, f.cause, f.action.kind) == ("users-db", "traffic", "rate_limit")
