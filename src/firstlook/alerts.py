@@ -36,6 +36,8 @@ class Alert:
     threshold: float
 
     def describe(self) -> str:
+        if not self.metric:  # from a real alert manager, which only says it fired
+            return f"{self.name} on {self.service} since {self.fired:%H:%M} UTC"
         return (
             f"{self.name} on {self.service}: {self.metric} {self.value:.3g}"
             f" (threshold {self.threshold:g}) since {self.fired:%H:%M} UTC"
