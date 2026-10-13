@@ -48,3 +48,15 @@ def test_recent_deploys_newest_first():
         "- 14:20 UTC inventory v3.2.1 by ci: Bump logging library",
     ]
     assert call("recent_deploys", service="web") == "No deploys in the last 120 minutes to web."
+
+
+def test_dependencies_both_ways():
+    assert call("dependencies", service="payments") == (
+        "payments calls: payments-db.\nCalled by: checkout."
+    )
+    assert call("dependencies", service="web").endswith("Called by: nothing.")
+
+
+def test_runbook():
+    assert call("read_runbook", service="payments").startswith("Errors right after a deploy")
+    assert call("read_runbook", service="web") == "No runbook for web."

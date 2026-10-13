@@ -83,4 +83,21 @@ def make_tools(env: Env) -> list:
             out.append(line + (f": {d.change}" if d.change else ""))
         return "\n".join(out)
 
-    return [list_alerts, query_metric, search_logs, recent_deploys]
+    @tool
+    def dependencies(service: str) -> str:
+        """What a service calls, and what calls it. Errors often start in a dependency
+        and show up in everything above it."""
+        calls = env.depends_on(service)
+        callers = [s for s in env.services() if service in env.depends_on(s)]
+        return (
+            f"{service} calls: {', '.join(calls) or 'nothing'}.\n"
+            f"Called by: {', '.join(callers) or 'nothing'}."
+        )
+
+    @tool
+    def read_runbook(service: str) -> str:
+        """The team's runbook notes for a service, if there are any."""
+        text = env.runbook(service)
+        return text if text else f"No runbook for {service}."
+
+    return [list_alerts, query_metric, search_logs, recent_deploys, dependencies, read_runbook]
