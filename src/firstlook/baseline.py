@@ -49,7 +49,8 @@ def baseline(env: Env, minutes: int = 120) -> Finding:
                 when = points[shift.index][0]
                 # On a tie, the service further down the call graph wins: callers
                 # fail in the same minute as the thing they call.
-                if first is None or when < first[0] or (when == first[0] and service != first[1]):
+                deeper = first and when == first[0] and service in _below(env, [first[1]])[1:]
+                if first is None or when < first[0] or deeper:
                     first = (when, service, metric, shift)
     if first is None:
         return Finding(
