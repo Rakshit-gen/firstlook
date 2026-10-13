@@ -62,3 +62,10 @@ def test_baseline_rate_limits_the_cache_in_a_flash_sale():
 def test_baseline_rolls_back_the_flag_but_calls_it_a_deploy():
     f = baseline(ScenarioEnv(builtin("flag-flip")))
     assert (f.service, f.cause, f.action.kind) == ("pricing", "deploy", "rollback")
+
+
+def test_baseline_blames_a_dependency_for_a_memory_leak():
+    # A known miss, like disk-full: the leak is a slow climb, so latency is
+    # the first step the rules see.
+    f = baseline(ScenarioEnv(builtin("memory-leak")))
+    assert (f.service, f.cause, f.action.kind) == ("notifier", "dependency", "escalate")

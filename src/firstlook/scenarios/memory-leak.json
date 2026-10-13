@@ -1,0 +1,26 @@
+{
+  "name": "memory-leak",
+  "title": "Notification emails delayed",
+  "start": "2026-10-08T20:00:00Z",
+  "minutes": 120,
+  "services": {
+    "api": {"depends_on": ["notifier"], "baseline": {"rps": 300}},
+    "notifier": {"depends_on": ["mail-relay"], "baseline": {"rps": 40, "memory": 0.4}},
+    "mail-relay": {"depends_on": [], "baseline": {"rps": 40, "p99_ms": 300}}
+  },
+  "effects": [
+    {"service": "notifier", "metric": "memory", "to": 0.97, "at": 5, "ramp": 90},
+    {"service": "notifier", "metric": "p99_ms", "to": 3500, "at": 85},
+    {"service": "notifier", "metric": "error_rate", "to": 0.08, "at": 95}
+  ],
+  "logs": [
+    {"service": "notifier", "at": 85, "per_minute": 3, "level": "warn",
+     "message": "GC pause 2.8s (heap 3.8 GiB of 4 GiB)"},
+    {"service": "notifier", "at": 95, "per_minute": 6,
+     "message": "java.lang.OutOfMemoryError: Java heap space in TemplateCache.put"}
+  ],
+  "truth": {"service": "notifier", "cause": "capacity", "fix": "restart"},
+  "runbooks": {
+    "notifier": "Heap climbing for hours means the template cache leak is back. Restart the pods (rolling) and file a bug; the last deploy was weeks ago."
+  }
+}
