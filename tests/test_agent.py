@@ -5,6 +5,7 @@ from langgraph.types import Command
 
 from firstlook.agent import build_agent
 from firstlook.env import ScenarioEnv
+from firstlook.executor import DryRun
 from firstlook.scenario import load
 
 ENV = ScenarioEnv(load("scenarios/bad-deploy.json"))
@@ -106,3 +107,18 @@ def test_escalations_need_no_approval():
     escalate = {**GOOD, "evidence": [], "action": {"kind": "escalate", "service": "payments"}}
     out = build_agent(scripted([AIMessage("no idea")], [escalate]), ENV).invoke({})
     assert "__interrupt__" not in out and "approved" not in out
+
+
+def test_approved_actions_go_to_the_executor_and_declined_ones_dont():
+    for approved, result in [
+        (True, "dry run: would roll back payments (previous version)"),
+        (False, "not done: sam declined"),
+    ]:
+        ex = DryRun()
+        model = scripted([calls(("recent_deploys", {})), AIMessage("deploy")], [GOOD])
+        app = build_agent(model, ENV, checkpointer=InMemorySaver(), executor=ex)
+        cfg = {"configurable": {"thread_id": "inc-2"}}
+        app.invoke({}, cfg)
+        out = app.invoke(Command(resume={"approved": approved, "by": "sam"}), cfg)
+        assert out["result"] == result
+        assert len(ex.done) == int(approved)

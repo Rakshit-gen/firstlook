@@ -11,6 +11,7 @@ from langgraph.types import interrupt
 
 from .checks import check_finding
 from .env import Env
+from .executor import DryRun, Executor
 from .finding import Finding
 from .prompts import CONCLUDE, SYSTEM, brief
 from .tools import make_tools
@@ -23,12 +24,21 @@ class State(TypedDict, total=False):
     finding: Finding
     approved: bool  # a person's answer to the proposed action
     approver: str
+    result: str  # what the executor reported
 
 
 MAX_TOOL_CALLS = 12
 
 
-def build_agent(model, env: Env, checkpointer=None, max_tool_calls: int = MAX_TOOL_CALLS):
+def build_agent(
+    model,
+    env: Env,
+    checkpointer=None,
+    max_tool_calls: int = MAX_TOOL_CALLS,
+    executor: Executor | None = None,
+):
+    executor = executor or DryRun()
+
     def intake(state: State):
         alerts = "\n".join(a.describe() for a in env.alerts()) or "No alerts firing."
         return {
@@ -108,6 +118,11 @@ def build_agent(model, env: Env, checkpointer=None, max_tool_calls: int = MAX_TO
             raise ValueError('resume with {"approved": true or false, "by": "name"}')
         return {"approved": answer["approved"], "approver": str(answer.get("by", "unknown"))}
 
+    def act(state: State):
+        if not state["approved"]:
+            return {"result": f"not done: {state['approver']} declined"}
+        return {"result": executor.run(state["finding"].action)}
+
     def over_budget(state: State):
         # Every tool call needs an answer, or the next model call is rejected.
         pending = state["messages"][-1].tool_calls
@@ -139,5 +154,7 @@ def build_agent(model, env: Env, checkpointer=None, max_tool_calls: int = MAX_TO
     g.add_edge("over_budget", "conclude")
     g.add_node("approve", approve)
     g.add_conditional_edges("conclude", needs_approval, ["approve", END])
-    g.add_edge("approve", END)
+    g.add_node("act", act)
+    g.add_edge("approve", "act")
+    g.add_edge("act", END)
     return g.compile(checkpointer=checkpointer)
