@@ -106,6 +106,9 @@ def parse(doc: dict) -> Scenario:
     for thing in [*s.deploys, *s.effects, *s.logs]:
         if thing.service not in s.services:
             raise ScenarioError(f"unknown service {thing.service}")
+    for name in [*s.runbooks, *([s.truth.service] if s.truth else [])]:
+        if name not in s.services:
+            raise ScenarioError(f"unknown service {name}")
     for e in s.effects:
         if e.metric not in METRICS:
             raise ScenarioError(f"unknown metric {e.metric} (have: {', '.join(METRICS)})")

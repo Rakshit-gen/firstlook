@@ -1,5 +1,9 @@
+from typing import get_args
+
 import pytest
 
+from firstlook.alerts import fired
+from firstlook.finding import ActionKind, Cause
 from firstlook.scenario import SCENARIOS, ScenarioError, builtin, load_all, parse
 
 DOC = {
@@ -27,6 +31,8 @@ def test_loads_the_bad_deploy_scenario():
         ({"effects": [{"service": "a", "metric": "vibes", "to": 1, "at": 1}]}, "unknown metric"),
         ({"deploys": [{"service": "q", "version": "1", "at": 1}]}, "unknown service q"),
         ({"start": "yesterday"}, "bad scenario"),
+        ({"truth": {"service": "r", "cause": "deploy", "fix": "rollback"}}, "unknown service r"),
+        ({"runbooks": {"s": "restart it"}}, "unknown service s"),
     ],
 )
 def test_rejects_broken_scenarios(change, message):
@@ -37,3 +43,11 @@ def test_rejects_broken_scenarios(change, message):
 def test_unknown_builtin_names_the_real_ones():
     with pytest.raises(ScenarioError, match="have: bad-deploy"):
         builtin("bad-deplo")
+
+
+@pytest.mark.parametrize("s", load_all(SCENARIOS), ids=lambda s: s.name)
+def test_every_builtin_scenario_is_usable(s):
+    assert (SCENARIOS / f"{s.name}.json").exists()
+    assert s.truth.cause in get_args(Cause) and s.truth.fix in get_args(ActionKind)
+    assert fired(s), "nothing would page anyone"
+    assert s.runbooks
